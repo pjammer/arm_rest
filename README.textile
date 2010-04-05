@@ -1,0 +1,3 @@
+h2. ArmRest - A simple CouchDB adapter for mMVC frameworks
+
+Future home of a new type of Framework based on MVC and using CouchDB as it's backend.
