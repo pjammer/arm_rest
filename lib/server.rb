@@ -4,27 +4,14 @@ require 'json/ext'
 
 module ArmRest
   class Server
-    #Here are the customizable variables, app_name, user_name and password.  should be the only thing to change.
-    def app_name
-      "pjammer"
-    end
-    def user_name
-      "admin"
-    end
-    def password
-      "mysecretpassword"
-    end
-    #if you have changed anything in the database at all, adjust this url to look like what you have.
-    # eg., maybe you don't use authentication yet change it to "http://127.0.0.1:5984/#{app_name}_#{environment}"
-    def database(environment)
-      "https://pjammer.cloudant.com/testbin"
-    end
-    #First create your 3 databases with your AppName_environment, e.g., basecamp_development, basecamp_test and basecamp_production.  This thing automagically expects this naming convention... for now.
-    def initialize(options = nil)
-      url = URI.parse("https://pjammer.cloudant.com/testbin")
+    #Basically set up sinatra to use a ENV["CLOUDANT_URL"] = "https://user:password@yourname.cloudant.com/somedbname".
+    def initialize(db_uri, options = nil)
+      url = URI.parse(db_uri)
       @host = url.host
       @port = url.port
       @path = url.path
+      @user = url.user
+      @passwd = url.password
       @options = options
     end
     # Delete the fucking thing, um, leave the arg blank to cancel the DB if i ain't mistaken.
@@ -36,6 +23,15 @@ module ArmRest
       req = requestor(Net::HTTP::Get.new(build_uri(uri)))
       parse req.body
     end
+    #use find for design documents
+    def find(doc_name, view, params=nil)
+      design_doc_url = build_design_uri(doc_name, view, params)
+      get(design_doc_url)
+    end
+    #add a key to a view
+    def add_key(arg)
+      "key=#{arg.to_json}"
+    end
     #PUT is used to update documents. E.g.,  server.put('id', {:valid => "json here"}) should work.
     def put(json, uri = nil)
       req = Net::HTTP::Put.new(build_uri(uri))
@@ -46,19 +42,28 @@ module ArmRest
       req = Net::HTTP::Post.new(build_uri(uri))
       prepare_doc(req, json)
     end
+    #sample design doc function func = {:wicked => {"map" => "function(doc) { emit(doc._id, doc); }"}}
     def create_design_doc(name, function_hash)
       @name = build_name(name)
       @functions = viewize function_hash
       put(@functions, @name)
     end
+    #add validations and where style keys find(name, view).key
+    private
+    #creates the view json call
     def viewize(functions)
       {:views => functions}
     end
+    #adds name to design document in format couchdb needs
     def build_name(name)
       "_design/#{name}"
     end
     
-    private
+    def build_design_uri(doc_name, view_name, params)
+      url = "#{build_name(doc_name)}/_view/#{view_name}"
+      params.nil? ? url : "#{url}?#{params}"
+    end
+    
     #Used to automate the actual database name from your calls to the db, letting you just worry about the document id.
     def build_uri(uri = nil)
       if uri.nil?
@@ -71,11 +76,12 @@ module ArmRest
     def requestor(req, json = nil)
       res = Net::HTTP.start(@host, @port, {:use_ssl => true}) { |http| 
         requesty = req
-        requesty.basic_auth("pjammer", "rockpapertroubletime")
+        requesty.basic_auth(@user, @passwd)
         requesty["content-type"] = "application/json"
         requesty.body = JSON json unless json.nil?
         http.request(requesty)
       }
+      puts res.inspect
       unless res.kind_of?(Net::HTTPSuccess)
         # let rails and sinatra handle this or print out if using ruby i say if, elsif, else
         handle_error(req, res)
