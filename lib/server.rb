@@ -1,8 +1,10 @@
 require 'net/http'
 require 'uri'
 require 'json/ext'
-
 module ArmRest
+  #ArmRest is the missing Ruby to CouchDB gem.  There are others but fucked if i could figure them out.
+  #Basically, ArmRest will work with Cloudant, Heroku and Sinatra.
+  #We are going to look for the wiki to really show you the flow.  Or the tests.
   class Server
     #Basically set up sinatra to use a ENV["CLOUDANT_URL"] = "https://user:password@yourname.cloudant.com/somedbname".
     def initialize(db_uri, options = nil)
@@ -74,19 +76,20 @@ module ArmRest
     end
     #Once you create your url and send it out to couch, the response will come back into this request variable to make sure it's a response it expects, or else it handles the error
     def requestor(req, json = nil)
-      res = Net::HTTP.start(@host, @port, {:use_ssl => true}) { |http| 
-        requesty = req
-        requesty.basic_auth(@user, @passwd)
-        requesty["content-type"] = "application/json"
-        requesty.body = JSON json unless json.nil?
-        http.request(requesty)
+      res = Net::HTTP.start(@host, @port, {:use_ssl => true}) { |http|
+        create_the_request(req, json, http)
       }
-      puts res.inspect
       unless res.kind_of?(Net::HTTPSuccess)
         # let rails and sinatra handle this or print out if using ruby i say if, elsif, else
         handle_error(req, res)
       end
       res
+    end
+    def create_the_request(req, json, http) 
+      req.basic_auth(@user, @passwd)
+      req["content-type"] = "application/json"
+      req.body = JSON json unless json.nil?
+      http.request(req)
     end
     #Refactored area of Post and Put that puts content type and json into .body
     def prepare_doc(req, json)
@@ -99,8 +102,7 @@ module ArmRest
     end
 
     def handle_error(req, res)
-      e = RuntimeError.new("#{res.code}:#{res.message}\nMETHOD:#{req.method}\nURI:#{req.path}\n#{res.body}")
-      raise e
+      raise RuntimeError.new("#{res.code}:#{res.message}\nMETHOD:#{req.method}\nURI:#{req.path}\n#{res.body}")
     end
   end
 end
